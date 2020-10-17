@@ -24,16 +24,21 @@ class Driver:
     MOBILE_DEVICE               = 1
 
     # Microsoft Edge user agents for additional points
-    __WEB_USER_AGENT            = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.48 Safari/537.36 Edg/74.1.96.24"
-    __MOBILE_USER_AGENT         = "Mozilla/5.0 (Windows Mobile 10; Android 8.0.0; Microsoft; Lumia 950XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Mobile Safari/537.36 Edge/80.0.361.62"
+    #agent src: https://www.whatismybrowser.com/guides/the-latest-user-agent/edge
+    __WEB_USER_AGENT            = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36 Edg/85.0.564.41"
+    __MOBILE_USER_AGENT         = "Mozilla/5.0 (Linux; Android 10; HD1913) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.81 Mobile Safari/537.36 EdgA/45.7.2.5057"
 
 
-    def __download_driver(driver_path, system, driver_dl_index=1):
+    def __download_driver(driver_path, system, driver_dl_index=0):
         # determine latest chromedriver version
         #version selection faq: http://chromedriver.chromium.org/downloads/version-selection
-        response = urlopen("https://sites.google.com/a/chromium.org/chromedriver/downloads", context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)).read()
+        try:
+            response = urlopen("https://sites.google.com/a/chromium.org/chromedriver/downloads", context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)).read()
+        except ssl.SSLError as e:
+            response = urlopen("https://sites.google.com/a/chromium.org/chromedriver/downloads").read()
         #download second latest version,most recent is sometimes not out to public yet
-        latest_version = re.findall(b"ChromeDriver \d+\.\d+\.\d+\.\d+",response)[driver_dl_index].decode().split()[1]
+
+        latest_version = re.findall(b"ChromeDriver \d{2,3}\.0\.\d{4}\.\d+",response)[driver_dl_index].decode().split()[1]
         print('downloading chrome driver version: ' + latest_version)
 
         if system == "Windows":
@@ -43,7 +48,10 @@ class Driver:
         elif system == "Linux":
             url = "https://chromedriver.storage.googleapis.com/{}/chromedriver_linux64.zip".format(latest_version)
 
-        response = urlopen(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)) # context args for mac
+        try:
+            response = urlopen(url, context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)) # context args for mac
+        except ssl.SSLError as e:
+            response = urlopen(url)# context args for mac
         zip_file_path = os.path.join(os.path.dirname(driver_path), os.path.basename(url))
         with open(zip_file_path, 'wb') as zip_file:
             while True:
@@ -84,31 +92,25 @@ class Driver:
             options.add_argument("--headless")
         #else:
         #    options.add_argument("--window-position=-2000,0") # doesnt move off screen
-        
+
         if device == Driver.WEB_DEVICE:
             options.add_argument("user-agent=" + Driver.__WEB_USER_AGENT)
         else:
             options.add_argument("user-agent=" + Driver.__MOBILE_USER_AGENT)
-        
-        driver_dl_index = 2
+
+        driver_dl_index = 1
         while True:
             try:
-                driver = webdriver.Chrome(path, chrome_options=options)
+                driver = webdriver.Chrome(path, options=options)
                 break
-            #driver not up to date with Chrome browswer
+            #driver not up to date with Chrome browser, try different ver
             except:
                 Driver.__download_driver(path, system, driver_dl_index)
-            if driver_dl_index < 0:
-                print('Tried downloading the ' + str(driver_dl_index + 1) + ' most recent chrome drivers. None match current Chrome browser version')
-                break
-            driver_dl_index -= 1
+                driver_dl_index += 1
+                if driver_dl_index > 2:
+                    print('Tried downloading the ' + str(driver_dl_index) + ' most recent chrome drivers. None match current Chrome browser version')
+                    break
 
         #if not headless:
         #    driver.set_window_position(-2000, 0)
         return EventFiringWebDriver(driver, EventListener())
-    def close(driver):
-        # close open tabs
-        for handle in driver.window_handles:
-            driver.switch_to.window(handle)
-            driver.close()
-
